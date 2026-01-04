@@ -23,10 +23,9 @@ namespace RhinoHaskellBridge
         private TextBox statusTextBox;
         private List<Guid> selectedSurfaceIds = new List<Guid>();
 
-        // Gradient controls
-        private TrackBar slider1, slider2, slider3, slider4, slider5;
+        // Gradient editor
         private Label gradientLabel;
-        private Panel gradientPreview;
+        private GradientEditor gradientEditor;
 
         public GridGeneratorPanel()
         {
@@ -67,34 +66,18 @@ namespace RhinoHaskellBridge
             // Gradient Section
             gradientLabel = new Label
             {
-                Text = "Z-Height Gradient (0=none, 100=full):",
+                Text = "Z-Height Gradient Control:",
                 Location = new Point(10, yPos),
                 Size = new Size(300, 20)
             };
             yPos += 25;
 
-            // Gradient preview panel
-            gradientPreview = new Panel
+            gradientEditor = new GradientEditor
             {
                 Location = new Point(10, yPos),
-                Size = new Size(300, 30),
-                BorderStyle = BorderStyle.FixedSingle
+                Size = new Size(300, 150)
             };
-            gradientPreview.Paint += GradientPreview_Paint;
-            yPos += 40;
-
-            // Create 5 sliders for gradient control
-            int sliderSpacing = 35;
-            slider1 = CreateSlider(10, yPos, "Start");
-            yPos += sliderSpacing;
-            slider2 = CreateSlider(10, yPos, "25%");
-            yPos += sliderSpacing;
-            slider3 = CreateSlider(10, yPos, "50%");
-            yPos += sliderSpacing;
-            slider4 = CreateSlider(10, yPos, "75%");
-            yPos += sliderSpacing;
-            slider5 = CreateSlider(10, yPos, "End");
-            yPos += sliderSpacing + 10;
+            yPos += 160;
 
             // Clear Button
             clearButton = new Button
@@ -120,7 +103,7 @@ namespace RhinoHaskellBridge
             statusTextBox = new TextBox
             {
                 Location = new Point(10, yPos),
-                Size = new Size(300, 90),
+                Size = new Size(300, 120),
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical
@@ -130,90 +113,10 @@ namespace RhinoHaskellBridge
             this.Controls.Add(listLabel);
             this.Controls.Add(surfaceListBox);
             this.Controls.Add(gradientLabel);
-            this.Controls.Add(gradientPreview);
+            this.Controls.Add(gradientEditor);
             this.Controls.Add(clearButton);
             this.Controls.Add(sendToHaskellButton);
             this.Controls.Add(statusTextBox);
-        }
-
-        private TrackBar CreateSlider(int x, int y, string labelText)
-        {
-            var label = new Label
-            {
-                Text = labelText,
-                Location = new Point(x, y + 5),
-                Size = new Size(50, 20)
-            };
-
-            var slider = new TrackBar
-            {
-                Location = new Point(x + 55, y),
-                Size = new Size(200, 30),
-                Minimum = 0,
-                Maximum = 100,
-                Value = 100,
-                TickFrequency = 10
-            };
-            slider.ValueChanged += Slider_ValueChanged;
-
-            var valueLabel = new Label
-            {
-                Text = "100",
-                Location = new Point(x + 260, y + 5),
-                Size = new Size(40, 20)
-            };
-            slider.Tag = valueLabel;  // Store reference to update value
-
-            this.Controls.Add(label);
-            this.Controls.Add(slider);
-            this.Controls.Add(valueLabel);
-
-            return slider;
-        }
-
-        private void Slider_ValueChanged(object sender, EventArgs e)
-        {
-            var slider = sender as TrackBar;
-            var label = slider.Tag as Label;
-            label.Text = slider.Value.ToString();
-
-            // Refresh gradient preview
-            gradientPreview.Invalidate();
-        }
-
-        private void GradientPreview_Paint(object sender, PaintEventArgs e)
-        {
-            var g = e.Graphics;
-            int width = gradientPreview.Width;
-            int height = gradientPreview.Height;
-
-            // Draw gradient based on slider values
-            var values = new[] { slider1.Value, slider2.Value, slider3.Value, slider4.Value, slider5.Value };
-
-            for (int x = 0; x < width; x++)
-            {
-                float t = x / (float)width;
-                float value = InterpolateGradient(t, values);
-                int gray = (int)(value * 2.55f);  // 0-100 to 0-255
-
-                using (var pen = new Pen(Color.FromArgb(gray, gray, gray)))
-                {
-                    g.DrawLine(pen, x, 0, x, height);
-                }
-            }
-        }
-
-        private float InterpolateGradient(float t, int[] values)
-        {
-            // t is 0-1, interpolate between the 5 values
-            float scaledT = t * (values.Length - 1);
-            int index = (int)scaledT;
-
-            if (index >= values.Length - 1)
-                return values[values.Length - 1];
-
-            float frac = scaledT - index;
-            return values[index] * (1 - frac) + values[index + 1] * frac;
         }
 
         private void SelectSurfaces_Click(object sender, EventArgs e)
@@ -277,23 +180,16 @@ namespace RhinoHaskellBridge
 
             try
             {
-                // Get gradient values
-                var gradientValues = new[]
-                {
-                    slider1.Value / 100.0,
-                    slider2.Value / 100.0,
-                    slider3.Value / 100.0,
-                    slider4.Value / 100.0,
-                    slider5.Value / 100.0
-                };
+                // Get gradient values (20 samples along the curve)
+                var gradientValues = gradientEditor.GetGradientValues(20);
 
                 var surfacesJson = new System.Text.StringBuilder();
                 surfacesJson.Append("{");
                 surfacesJson.Append("\"gradient\":[");
-                for (int i = 0; i < gradientValues.Length; i++)
+                for (int i = 0; i < gradientValues.Count; i++)
                 {
                     surfacesJson.Append(gradientValues[i]);
-                    if (i < gradientValues.Length - 1) surfacesJson.Append(",");
+                    if (i < gradientValues.Count - 1) surfacesJson.Append(",");
                 }
                 surfacesJson.Append("],");
 
